@@ -1,0 +1,5 @@
+# compiled binaries / objects
+pa1_q1
+*.o
+*.out
+a.out
