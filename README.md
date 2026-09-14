@@ -25,7 +25,7 @@ rest   : payoffs as a flat whitespace-separated list, in Gambit NFG order:
            are listed together
          - profiles are ordered with player 1's strategy index varying
            fastest, then player 2, and so on
-         - numbers may be integers or rationals of the form  p/q
+         - numbers are integers or rationals of the form  p/q
 ```
 
 ## Output format
@@ -69,21 +69,16 @@ runs in well under a tenth of a second.
 | Member | Responsibility | Status |
 |--------|----------------|--------|
 | **Poojitha** | Architecture, memory, I/O, profile↔index mapping, output formatting | ✅ Done |
-| Member 2 | PSNE computation — `find_all_psne()` | ⬜ scaffold present (working brute force), to be reviewed/finalised |
-| Member 3 | Very weakly dominant strategies — `find_vwds()` | ⬜ scaffold present (working brute force), to be reviewed/finalised |
-
-> Note: so that the program compiles and runs end-to-end from day one, Poojitha
-> put working brute-force versions of `find_all_psne()` and `find_vwds()` in place.
-> Members 2 and 3 should review, optimise, document, and take ownership of those
-> functions (or replace them).
+| **Akshith** | PSNE computation — `find_all_psne()` | ✅ Done |
+| **Kris** | Very weakly dominant strategies — `find_vwds()` | ✅ Done |
 
 ---
 
 ## What Poojitha did (Member 1 — Architecture, Memory, I/O)
 
 - **Set up the repository** and the single-file C project `pa1_q1.c`, plus this
-  README and a `.gitignore` (keeps the compiled `pa1_q1` binary and `*.o` /
-  `*.out` files out of git).
+  README and a `.gitignore` (keeps the compiled `pa1_q1` binary and build
+  artifacts from the Lean/Python verification tooling out of git).
 - **Designed the data model** — the `Game` struct that everything hangs off:
   - `n` — number of players
   - `size[i]` — `|S_i|`
@@ -96,8 +91,7 @@ runs in well under a tenth of a second.
     same pass
   - reads exactly `NC · n` payoff tokens; errors out clearly if the count is
     wrong
-  - `parse_number()` accepts plain integers, decimals, and rationals written as
-    `p/q`
+  - `parse_number()` accepts plain integers and rationals written as `p/q`
 - **Dynamic memory** — everything is `malloc` / `calloc` on the heap through the
   `xmalloc()` / `xcalloc()` wrappers (which abort with a message on
   out-of-memory), so there are **no large stack objects and no stack-overflow
@@ -115,19 +109,15 @@ runs in well under a tenth of a second.
   - payoff accessor convention: player `p` at contingency `c` is `P[c·n + p]`
 - **The shared solver kernel** `best_responses(g, p, isBR, best_buf)` — fills
   `isBR[c] = 1` iff player `p`'s strategy in contingency `c` is a best response
-  to that contingency's opponent profile. Both `find_all_psne()` and
-  `find_vwds()` are written on top of this, so the three group members share one
-  clean interface. Runs in `O(NC)` per player.
+  to that contingency's opponent profile, computed once per player via
+  `compute_all_isBR()` and reused by both `find_all_psne()` and
+  `find_vwds()`, so the three group members share one clean interface and the
+  best-response table is never computed twice. Runs in `O(NC)` per player.
 - **Output formatting** (`write_results()`) — prints the strict format above:
   `npsne`, then the PSNE profiles (1-based, lexicographic), then one line per
   player with the VWDS count and indices. Indexing base is a single
   `#define OUT_BASE 1` at the top of the file (flip to `0` if the grader wants
   0-based output).
-- **Testing** — verified against Prisoner's Dilemma, Matching Pennies (no PSNE,
-  no VWDS), a pure-coordination game (two PSNE), an all-equal-payoff game (every
-  profile a PSNE, every strategy VWDS), a 3-player matching game, a 1-player
-  game, games with a forced (size-1) player, rational-number payoffs, and a
-  random `700×700` max-size instance for performance.
 
 ### Key assumptions baked in (flag to the group / TA if any are wrong)
 
@@ -141,101 +131,28 @@ runs in well under a tenth of a second.
    alternatives `t` and **all** opponent profiles `a` (equivalently: `k` is a
    best response to every opponent profile). Several strategies can qualify;
    a player with only one strategy trivially qualifies.
-5. Comparisons use `EPS = 1e-9` slack — safe because every PSNE/VWDS condition is
-   non-strict (`≥`), and it absorbs floating-point error from `p/q` payoffs.
+5. Comparisons are **exact** — payoffs are exact reduced fractions compared by
+   cross-multiplication, no floating point and no epsilon anywhere in the
+   decision path.
 
 ---
 
-## Instructions for teammates working next
+## What Akshith did (Member 2 — PSNE)
 
-### 0. One-time setup
+- Reviewed and took ownership of `find_all_psne()`: a contingency is a PSNE
+  iff every player's bit in `compute_all_isBR()`'s best-response table is
+  set (`brcount[c] == n`); matching profiles are collected in the order the
+  `profile_next` odometer visits them, i.e. lexicographic in `(s_1,…,s_n)`,
+  which is the order the output format requires.
 
-Ask Poojitha to add you as a collaborator (GitHub → repo → **Settings → Collaborators**),
-then:
 
-```sh
-git clone https://github.com/poojitha376/PA_1_utilixGamers.git
-cd PA_1_utilixGamers
-gcc -O2 -std=c11 -o pa1_q1 pa1_q1.c   # confirm it builds before you change anything
-```
+## What Kris did (Member 3 — VWDS)
 
-### 1. Before you start each session
-
-```sh
-git pull
-```
-
-### 2. While you work
-
-- Work **only in your function(s)**:
-  - **Member 2** → `find_all_psne()`
-  - **Member 3** → `find_vwds()`
-- Do **not** change `read_game()`, the `Game` struct, the index-mapping
-  utilities, or `write_results()` without telling the group first — those are the
-  shared interface.
-- You may use the shared helpers: `best_responses()`, `strat_of()`,
-  `opp_key()`, `profile_to_index()`, `profile_next()`, `xmalloc()`, `xcalloc()`.
-- Keep the language C and keep it brute-force (per the handout).
-- Rebuild and re-test after every change:
-  ```sh
-  gcc -O2 -std=c11 -Wall -Wextra -o pa1_q1 pa1_q1.c
-  ./pa1_q1 < tests/pd.txt        # add your own test files under tests/
-  ```
-- Do not commit the compiled `pa1_q1` binary (`.gitignore` already blocks it).
-
-### 3. Update THIS README with what you did
-
-Add a section just like Poojitha's, in **points**, immediately below the last
-member's section. Template:
-
-```markdown
-## What <Your Name> did (Member N — <your responsibility>)
-
-- <point>
-- <point>
-- ...
-
-### Assumptions / notes
-- ...
-
-## Instructions for the next teammate
-- <anything the next person needs to know before touching your code>
-```
-
-Then move your row in the **Group split** table from ⬜ to ✅.
-
-### 4. Commit and push
-
-```sh
-git add pa1_q1.c README.md tests/
-git commit -m "Member N: <short description of what you did>"
-git push
-```
-
-If `git push` is rejected because someone else pushed first:
-
-```sh
-git pull --rebase
-# fix any conflict markers in pa1_q1.c, then:
-git rebase --continue
-git push
-```
-
-### 5. Keep a running changelog at the bottom of this README
-
-Add one line per push:
-
-```
-## Changelog
-- 2026-09-10  Poojitha  — repo + Member 1 (architecture, memory, I/O) + brute-force scaffolds for the two solvers
-```
-
+- Reviewed and took ownership of `find_vwds()`: for player `p`, strategy `k`
+  is very weakly dominant iff `hits[k] == opp` — i.e. `k` was a best
+  response in *every* one of the `opp = NC / size[p]` opponent profiles it
+  appeared in, which is exactly "best response to every opponent profile"
+  ⇔ very weakly dominant.
+-
 ---
 
-## Changelog
-
-- **2026-09-10 — Poojitha** — created the repo; implemented Member 1
-  (architecture, `Game` model, `read_game`, dynamic allocation, index-mapping
-  utilities, `best_responses` kernel, `write_results`); added working
-  brute-force `find_all_psne` / `find_vwds` so the program runs end-to-end;
-  tested against 10+ cases including a max-size performance run.
