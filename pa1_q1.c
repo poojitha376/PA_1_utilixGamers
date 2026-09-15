@@ -130,6 +130,16 @@ static Rat parse_number(const char *tok)
         }
         return make_rat(num, den);
     }
+    const char *dot = strchr(tok, '.');
+    if (dot) {                              /* plain decimal, convert to an exact fraction */
+        char buf[64];
+        size_t k = 0;
+        for (const char *c = tok; *c; c++) if (*c != '.') buf[k++] = *c;
+        buf[k] = '\0';
+        long long den = 1;
+        for (const char *c = dot + 1; *c; c++) den *= 10;
+        return make_rat(strtoll(buf, NULL, 10), den);
+    }
     return make_rat(strtoll(tok, NULL, 10), 1);
 }
 
